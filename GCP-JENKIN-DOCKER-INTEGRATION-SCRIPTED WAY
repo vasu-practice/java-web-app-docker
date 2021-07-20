@@ -1,0 +1,53 @@
+//SCRIPTED WAY THE JENKINS INTEGRATION WITH DOCKER BUILD THE IMAGE AND CREATE THE CONTAINER AND DEPPLOY IN TO DEPLOYMENT SEVER
+//starting with node
+//---------------------------------------------------------------------------------------------
+node
+{
+def buildNumber = BUILD_NUMBER      //here i am defining "build_number" as a global variable  
+//--------------------------------------------------------------------------------------------------
+//1st-stage:checkout the code from github or download the code from git hub
+//-------------------------------------------------------------------------------
+stage ("DOWNLOADIG THE CODE FROM GITHUB")
+{
+git credentialsId: '34f5c454-1db8-4b79-ae5a-3bd3831053fc', url: 'https://github.com/vasu-practice/java-web-app-docker.git'
+}
+//2nd-stage build the package using maven tool before configure global tool in mange jenkins--global tool
+//------------------------------------------------------------------------------------------------------------
+stage ("BUILDING THE PACKAGE")
+{
+def mavenHome = tool name: "maven", type: "maven"         // here this is the syntax remember
+sh "${mavenHome}/bin/mvn clean package"             // here executing the command remember
+}    
+//--------------------------------------------------------------------------------------------------------------
+//stage-3 now create the image using docker file
+stage ("create the docker image")
+{
+sh "docker build -t vasudockerhubacc/java-web-app-docker:${buildNumber} ." //here docker build command is used and buildnumber gloable variable
+}
+//stage-4 here I want to login first into dockerhub and push the image to docker hub using docker hub credentials
+// for that, fist create a secret for dockerhub password 
+//so click on pipeline syntax-->select--snippet generator--->select with Credentials:Bind Credentials to variable option
+// click on add option--click on jenkins---->select secret text--->in secret box type ur docker hub password.
+// then in ID BOX give any id name like dockerhubpwd and same also in Description box also give same
+//then clikc on add button
+// here type in variable box type dockerhubpwd same above given
+// now click on generate and copy that snippet and paste in script
+stage ("LOGIN IN DOCKER HUB AND PUSH INTO DOKCER HUB ACCOUNT")
+{
+withCredentials([string(credentialsId: 'Docker_Hub_Pwd', variable: 'Docker_Hub_Password')]) 
+{
+sh "docker login -u vasudockerhubacc -p ${Docker_Hub_Password}"
+}
+sh "docker push vasudockerhubacc/java-web-app-docker:${buildNumber}"
+}
+//depooy application as a container in docker deployment server
+stage ("DEPLOYING APPLICATON AS CONTAINER IN DOCKER DEPLOYEMNT  SERVER")
+{
+sshagent(['docker_dev_server_ssh'])
+{
+sh "ssh -o StrictHostKeyChecking=no vasu_gcpacc@34.66.127.37 docker rm -f javawebappcontainer || true"    
+sh "ssh -o StrictHostKeyChecking=no vasu_gcpacc@34.66.127.37 docker run -d --name javawebappcontainer -p 9092:8080 vasudockerhubacc/java-web-app-docker:${buildNumber}"
+}
+//-------------------------------------------------------------------------------------------------------------------------
+}
+}// end node
